@@ -1,0 +1,114 @@
+---
+name: windows_monitoring_heartbeat_failure
+pack: ntt_monitoring
+description: Gather opsramp agent for the given VM  
+runner_type: orquesta
+entry_point: workflows/windows_monitoring_heartbeat_failure.yaml
+enabled: true
+parameters:
+  assignment_group:
+    type: string
+    description: "Assignment group from ITSM to pass into the database entry"
+    required: true
+  ci_address:
+    type: string
+    description: "FQDN of the Windows server to check the cpu for"
+    required: true 
+  customer_abbr:
+    type: string
+    description: "3 letter customer abbreviation"
+    required: true
+    default: "{{ st2kv.system.customer_abbr }}"
+  customer_name:
+    type: string
+    description: "Customer name from ITSM to pass into the database entry"
+    required: true 
+  detailed_desc:
+    type: string
+    description: "Detailed description name from ITSM to pass into the database entry"
+    required: true  
+  dns_domain:
+    type: string
+    description: "DNS domain to append to the hostname"
+    required: true
+    default: "{{ st2kv.system.winrm.dns_domain }}"
+  inc_number:
+    type: string
+    description: "ITSM incident number"
+    required: true
+  inc_sys_id:
+    type: string
+    description: "ITSM incident sys_id"
+    required: true
+  incident_state:
+    type: string
+    description: "ITSM incident state"
+    required: true
+    default: "2" 
+  incident_open_at:
+    type: string
+    description: "ITSM incident created at"
+    required: false    
+  os_type:
+    type: string
+    description: "Operating system type of the server (windows, linux)"
+    required: true
+    default: "windows"  
+  short_desc:
+    type: string
+    description: "Short description name from ITSM to pass into the database entry"
+    required: true  
+  uptime_threshold:
+    type: integer
+    description: "Server uptime threshold"
+    required: false
+    default: "{{ st2kv.system.Win_mnt_hb_failure_uptime_threshold | int }}"
+  rec_short_desc:
+    type: string
+    description: "this Short description name from ITSM to pass into the recurrence logic"
+    required: false 
+  rec_detailed_desc:
+    type: string
+    description: "Detailed description name from ITSM to pass into the recurrence logic"
+    required: false  
+  configuration_item_name:
+    type: string
+    description: "configuration item name from ITSM to pass into the recurrence logic"
+    required: false
+  configuration_item_env:
+    type: string
+    description: "configuration item env from ITSM "
+    required: false
+    default: "staging"
+  priority_upgrade_escalate:
+    type: boolean
+    description: "Whether or not to upgrade the priority while esclation"
+    required: false
+    default: "{{ st2kv.system.Win_mnt_hb_failure_priority_upgrade }}"
+  serviceslist:
+    type: string
+    description: "service name for checking on the VM "
+    required: false
+    default: "opsramp-shield,opsramp-agent"
+  winrm_password_key:
+    type: string
+    description: "ST2 key that stores winrm password for bolt runs"
+    required: false
+  winrm_port_key:
+    type: integer
+    description: "ST2 key that stores winrm port for bolt runs"
+    required: false
+  winrm_username_key:
+    type: string
+    description: "ST2 key that stores winrm username for bolt runs"
+    required: false
+  winrm_ssl_key:
+    type: string
+    description: "ST2 key that stores winrm ssl for bolt runs"
+    required: false
+  winrm_verify_ssl_key:
+    type: string
+    description: "ST2 key that stores winrm verify_ssl for bolt runs"
+    required: false
+
+

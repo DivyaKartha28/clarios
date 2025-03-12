@@ -1,0 +1,894 @@
+---
+version: 1.0
+description: "Gather information on opsramp,SNMP Trap,RDP services and take action"
+#platform: Windows
+
+input:
+  - assignment_group
+  - ci_address
+  - customer_abbr
+  - customer_name
+  - detailed_desc
+  - dns_domain
+  - inc_number
+  - inc_sys_id
+  - incident_open_at
+  - incident_state
+  - os_type
+  - short_desc
+  - uptime_threshold
+  - rec_short_desc
+  - rec_detailed_desc
+  - configuration_item_name
+  - configuration_item_env
+  - serviceslist
+  - priority_upgrade_escalate
+  - winrm_password_key
+  - winrm_port_key
+  - winrm_username_key
+  - winrm_ssl_key
+  - winrm_verify_ssl_key
+
+vars:
+  # Number of times the cpu queue length is consecutively above the threshold
+  #- priority_upgrade_escalate: true
+  - end_timestamp: ""
+  - error_message: ""
+  - error_output: ""
+  - run_error: false
+  - run_error_config: false
+  - run_error_ping: false
+  - start_timestamp: ""
+  - uptime_value: null
+  - threshold_passed: true
+  - am_status: "Success"
+  - found_recurrence: false
+  - found_recurrence_value: ""
+  - found_recurrence_inc_cnt: 0
+  - service_name: "OpsRamp agent"
+  - service_validation_result: ""
+  - server_service_status: ""
+  - service_check_info: ""
+  - notes: ""
+  - server_uptime_days: 0
+  - event1074: ""
+  - auto_service_status_info: ""
+  - default_retry_limit: 3
+  - default_retry_delay: 300
+  - winrm_password: ""
+  - winrm_port: ""
+  - winrm_scheme: ""
+  - winrm_username: ""
+  - winrm_verify_ssl: ""
+  - agent_flag: true
+  - restart_flag: false
+  - telnet_failure: false
+  - proxy_server: ""
+  - service_retry_value: "3"
+  - force_restart_flag: "0"
+
+output:
+  # Append stdout to the end of the error message
+  - error_message: "{{ ctx().error_message + ctx().error_output }}"
+  - found_recurrence: "{{ ctx().found_recurrence }}"
+  - found_recurrence_value: "{{ ctx().found_recurrence_value }}"
+  - found_recurrence_inc_cnt: "{{ ctx().found_recurrence_inc_cnt }}"
+  - server_service_status: "{{ ctx().server_service_status }}"
+  - server_uptime_days: "{{ ctx().server_uptime_days }}"
+  - event1074: "{{ ctx().event1074 }}"
+  - serviceslist: "{{ctx().serviceslist }}"
+
+tasks:
+  config_vars_get:
+    action: ntt_monitoring.config_vars_get
+    input:
+      customer_abbr: "{{ ctx().customer_abbr }}"
+      workflow_overrides:
+        bolt_winrm_password_key: "{{ ctx().winrm_password_key }}"
+        bolt_winrm_port_key: "{{ ctx().winrm_port_key }}"
+        bolt_winrm_username_key: "{{ ctx().winrm_username_key }}"
+        bolt_winrm_ssl_key: "{{ ctx().winrm_ssl_key }}"
+        bolt_winrm_verify_ssl_key: "{{ ctx().winrm_verify_ssl_key }}"
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - winrm_password: "{{ result().result.connections.winrm_password if 'connections' in result().result and 'winrm_password' in result().result.connections else '' }}"
+          - winrm_port: "{{ result().result.connections.winrm_port if 'connections' in result().result and 'winrm_port' in result().result.connections else '' }}"
+          - winrm_scheme: "{{ result().result.connections.winrm_scheme if 'connections' in result().result and 'winrm_scheme' in result().result.connections else '' }}"
+          - winrm_username: "{{ result().result.connections.winrm_username if 'connections' in result().result and 'winrm_username' in result().result.connections else '' }}"
+          - winrm_verify_ssl: "{{ result().result.connections.winrm_verify_ssl if 'connections' in result().result and 'winrm_verify_ssl' in result().result.connections else '' }}"
+          - ssh_password_key: "{{ result().result.connections.bolt_ssh_password_key if 'connections' in result().result and 'bolt_ssh_password_key' in result().result.connections else '' }}"
+          - ssh_username_key: "{{ result().result.connections.bolt_ssh_username_key if 'connections' in result().result and 'bolt_ssh_username_key' in result().result.connections else '' }}"
+          - ssh_tmp_dir_key: "{{ result().result.connections.bolt_ssh_tmp_dir_key if 'connections' in result().result and 'bolt_ssh_tmp_dir_key' in result().result.connections else '' }}"
+          - winrm_password_key: "{{ result().result.connections.bolt_winrm_password_key if 'connections' in result().result and 'bolt_winrm_password_key' in result().result.connections else '' }}"
+          - winrm_port_key: "{{ result().result.connections.bolt_winrm_port_key if 'connections' in result().result and 'bolt_winrm_port_key' in result().result.connections else '' }}"
+          - winrm_username_key: "{{ result().result.connections.bolt_winrm_username_key if 'connections' in result().result and 'bolt_winrm_username_key' in result().result.connections else '' }}"
+          - winrm_ssl_key: "{{ result().result.connections.bolt_winrm_ssl_key if 'connections' in result().result and 'bolt_winrm_ssl_key' in result().result.connections else '' }}"
+          - winrm_verify_ssl_key: "{{ result().result.connections.bolt_winrm_verify_ssl_key if 'connections' in result().result and 'bolt_winrm_verify_ssl_key' in result().result.connections else '' }}"
+          - start_timestamp: "{{ task('config_vars_get').start_timestamp }}"
+        do:
+          - check_recurrence
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Could not get connection info for {{ ctx().customer_abbr }} or default please check the config file and try again"
+          - run_error_config: true
+        do:
+          - noop
+
+  check_recurrence:
+    action: ntt_itsm.itsm_recurrence_logic
+    input:
+      inc_id: "{{ ctx().inc_sys_id }}"
+      rec_ds_key_name: "Win_mnt_hb_failure_Rec_logic_days"
+      company_name: "{{ ctx().customer_name }}"
+      ci_name: "{{ ctx().configuration_item_name }}"
+      short_desc: "{{ ctx().rec_short_desc }}"
+      long_desc: "{{ ctx().rec_detailed_desc }}"
+    next:
+      - when: "{{ succeeded() and result().result.Found_Recurrence }}"
+        publish:
+          - found_recurrence: "{{ result().result.Found_Recurrence }}"
+          - found_recurrence_value: "{{ result().result.value }}"
+          - found_recurrence_inc_cnt: "{{ result().result.Found_Recurrence_Inc_Cnt }}"
+        do:
+          - rec_itsm_update_check
+      - when: "{{ succeeded() and not result().result.Found_Recurrence }}"
+        publish:
+          - found_recurrence: "{{ result().result.Found_Recurrence }}"
+          - found_recurrence_value: "{{ result().result.value }}"
+          - found_recurrence_inc_cnt: "{{ result().result.Found_Recurrence_Inc_Cnt }}"
+        do:
+          - rec_itsm_update_check
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to get the recurrence details from ITSM incident {{ ctx().inc_number }}!"
+        do:
+          - itsm_cleanup
+
+  rec_itsm_update_check:
+    action: core.noop
+    next:
+      - when: "{{ succeeded() and (ctx().incident_state == '2') }}"
+        do:
+          - rec_itsm_update_results
+      - when: "{{ succeeded() and (ctx().incident_state == '-5') }}"
+        do:
+          - ping_test
+
+  rec_itsm_update_results:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      work_in_progress: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "{{ ctx().found_recurrence_value }}"
+    next:
+      - when: "{{ succeeded() }}"
+        do:
+          - ping_test
+      - when: "{{ failed() }}"
+        do:
+          - noop
+
+  ping_test:
+    action: ntt_monitoring.unreachable_to_ping
+    input:
+      check_uptime: false
+      ci_address: "{{ ctx().ci_address }}"
+      close_incident: false
+      inc_number: "{{ ctx().inc_number }}"
+      inc_sys_id: "{{ ctx().inc_sys_id }}"
+      insert_db: false
+      os_type: "{{ ctx().os_type }}"
+      recheck_limit: "{{ st2kv('system.windows_heartbeat_failure_ping_recheck_limit') }}"
+      sleep_interval: "{{ st2kv('system.windows_heartbeat_failure_ping_sleep_interval') }}"
+
+    next:
+      - when: "{{ succeeded() and (ctx().incident_state == '2') }}"
+        publish:
+          - uptime_value: "{{ result().output.uptime_value }}"
+          - start_timestamp: "{{ task('config_vars_get').start_timestamp }}"
+        do:
+          - incident_exec_id_update
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "{{ result().output.error_message }}"
+          - run_error: true
+          - run_error_ping: true
+          - start_timestamp: "{{ task('config_vars_get').start_timestamp }}"
+        do:
+          - finish
+
+  incident_exec_id_update:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      work_in_progress: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "Automation Job ID of Monitoring Heartbeat Failure Workflow: <% ctx(st2).action_execution_id %>"
+    next:
+      - when: "{{ succeeded() and ( ctx().incident_state == '2') }}"
+        do:
+          - itsm_update_CIEnv
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to update the ITSM incident {{ ctx().inc_number }}!"
+        do:
+          - get_end_timestamp
+
+  itsm_update_CIEnv:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "The Incident reported device is for {{ ctx().configuration_item_env }} environment"
+    next:
+      - when: "{{ succeeded() }}"
+        do:
+          - agent_check
+      - when: "{{ failed() }}"
+        do:
+          - noop
+
+  agent_check:
+    action: core.winrm_ps_cmd
+    input:
+      host: "{{ ctx().ci_address }}"
+      password: "{{ ctx().winrm_password }}"
+      username: "{{ ctx().winrm_username }}"
+      verify_ssl_cert: "{{ ctx().winrm_verify_ssl }}"
+      port: "{{ ctx().winrm_port | int }}"
+      scheme: "{{ ctx().winrm_scheme }}"
+      cmd: 'powershell -file "C:\Program Files (x86)\OpsRamp\Agent\plugins\agentstatusinformation_windows.ps1" | convertfrom-json | select -property agentStatus'
+      timeout: 300
+    retry:
+      count: "{{ ctx().default_retry_limit }}"
+      delay: "{{ ctx().default_retry_delay }}"
+    next:
+      - when: "{{ succeeded() and 'OFFLINE' in result().stdout and not ctx().restart_flag }}"
+        publish:
+          - agent_flag: false
+          - notes: |
+                  Opsramp agent status is Offline.
+
+                  {{ result().stdout }}
+        do:
+          - itsm_update_results
+          - service_check
+      - when: "{{ succeeded() and 'ONLINE' in result().stdout and not ctx().restart_flag }}"
+        publish:
+          - agent_flag: true
+          - notes: |
+                  Opsramp agent status is Online.
+
+                  {{ result().stdout }}
+        do:
+          - itsm_update_results
+          - service_check
+      - when: "{{ succeeded() and 'OFFLINE' in result().stdout and ctx().restart_flag and ctx().force_restart_flag=='0' }}"
+        publish:
+          - agent_flag: false
+          - service_retry_value: "1"
+          - force_restart_flag: "1"
+          - notes: |
+                  Opsramp agent status is Offline.
+
+                  {{ result().stdout }}
+        do:
+          - itsm_update_results
+          - service_check
+      - when: "{{ succeeded() and 'OFFLINE' in result().stdout and ctx().restart_flag and ctx().force_restart_flag=='1' }}"
+        publish:
+          - agent_flag: false
+          - notes: |
+                  Opsramp agent status is Offline.
+
+                  {{ result().stdout }}
+        do:
+          - itsm_update_results
+          - full_proxy_details
+      - when: "{{ succeeded() and 'ONLINE' in result().stdout and ctx().restart_flag }}"
+        publish:
+          - agent_flag: true
+          - notes: |
+                  Opsramp agent status is Online.
+
+                  {{ result().stdout }}
+        do:
+          - itsm_update_results
+          - finish
+      - when: "{{ failed() and result().error }}"
+        publish:
+          - error_message: "{{ result().error }}"
+          - notes: |
+                  Error in getting Opsramp agent status.
+
+                  {{ ctx().error_message }}
+        do:
+          - itsm_update_results
+          - finish
+      - when: "{{ (failed() or (succeeded() and (result().stdout=='' or 'ERROR' in result().stdout))) and not result().error }}"
+        publish:
+          - error_message: "{{ result().stdout if result().stdout != '' else result().stderr }}"
+          - notes: |
+                  Error in getting Opsramp agent status.
+
+                  {{ ctx().error_message }}
+        do:
+          - itsm_update_results
+          - finish
+      - when: "{{ (failed() and 'Failed to establish a new connection' in result().error ) }}"
+        publish:
+          - error_message: "{{ result().error }}"
+          - notes: |
+                  Error in getting Opsramp agent status.
+
+                  Failed to establish connection due to port 5985 connection
+
+                  {{ ctx().error_message }}
+        do:
+          - itsm_update_results
+          - finish
+      - when: "{{ (succeeded() and 'ONLINE' not in result().stdout  and 'OFFLINE' not in result().stdout) }}"
+        publish:
+          - error_message: "{{ result().stderr }}"
+          - notes: |
+                  Error in getting Opsramp agent status.
+
+                  Agent status is empty.
+        do:
+                #- itsm_update_results
+          - finish
+
+  service_check:
+    action: ntt_monitoring.bolt_plan
+    input:
+      server_fqdn: "{{ ctx().ci_address }}"
+      os_type: "{{ ctx().os_type }}"
+      plan: "ntt_monitoring::win_monitoring_heartbeat_failure"
+      bolt_timeout: 3600
+      params:
+        dns_domain: "{{ ctx().dns_domain }}"
+        serviceslist: "{{ ctx().serviceslist }}"
+        serviceretry: "{{ ctx().service_retry_value }}"
+        forcerestart: "{{ ctx().force_restart_flag }}"
+      st2kv_config:
+        ssh.password: "{{ ctx().ssh_password_key }}"
+        ssh.user: "{{ ctx().ssh_username_key }}"
+        winrm.password: "{{ ctx().winrm_password_key }}"
+        winrm.user: "{{ ctx().winrm_username_key }}"
+        winrm.port: "{{ ctx().winrm_port_key }}"
+        winrm.ssl: "{{ ctx().winrm_ssl_key }}"
+        winrm.ssl-verify: "{{ ctx().winrm_verify_ssl_key }}"
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - notes: "{{ result().output.run.result.output }}"
+          - server_service_status: "{{ result().output.run.result.server_service_status }}"
+          - server_uptime_days: "{{ result().output.run.result.server_uptime_days | int }}"
+          - event1074: "{{ result().output.run.result.event1074 }}"
+          - run: "{{ result().output.run }}"
+        do:
+          - itsm_update_results
+          - service_validation
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "{{ result().output.run.result.details.result_set[0].value._error.msg + '\\n' }}"
+          - error_output: "{{ result().output.run.result.details.result_set[0].value._output if '_output' in result().output.run.result.details.result_set[0].value else '' }}"
+          - run: "{{ result().output.run.result.details.result_set[0].value._error.msg }}"
+          - run_error: true
+        do:
+          - itsm_cleanup
+
+  service_validation:
+    action: core.noop
+    next:
+      - when: "{{ succeeded() and (ctx().server_service_status != 'running') }}"
+        do:
+          - full_proxy_details
+      - when: "{{ succeeded() and (ctx().server_service_status == 'running') and not ctx().agent_flag }}"
+        publish:
+          - restart_flag: true
+        do:
+          - agent_check
+      - when: "{{ succeeded() and (ctx().server_service_status == 'running') and ctx().agent_flag }}"
+        publish:
+          - restart_flag: true
+        do:
+          - finish
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to verify the service status {{ ctx().inc_number }}!"
+        do:
+          - itsm_cleanup
+
+  full_proxy_details:
+    action: core.winrm_ps_cmd
+    input:
+      host: "{{ ctx().ci_address }}"
+      password: "{{ ctx().winrm_password }}"
+      username: "{{ ctx().winrm_username }}"
+      verify_ssl_cert: "{{ ctx().winrm_verify_ssl }}"
+      port: "{{ ctx().winrm_port | int }}"
+      scheme: "{{ ctx().winrm_scheme }}"
+      cmd: 'get-content “C:\Program Files (x86)\OpsRamp\Agent\conf\configuration.properties” | where { $_ -like  “*proxy*" }'
+      timeout: 300
+    retry:
+      count: "{{ ctx().default_retry_limit }}"
+      delay: "{{ ctx().default_retry_delay }}"
+    next:
+      - when: "{{ (succeeded() and 'proxy_server = null' not in result().stdout) }}"
+        publish:
+          - notes: |
+                  Proxy details from the configuration file is
+
+                  {{ result().stdout }}
+        do:
+          - itsm_update_results
+          - get_proxy_details
+      - when: "{{ (succeeded() and 'proxy_server = null' in result().stdout) }}"
+        publish:
+          - notes: |
+                  Unable to get the proxy details.Proxy details seem to be 'Null'.
+
+                  {{ result().stdout }}
+        do:
+          - itsm_update_results
+          - finish
+      - when: "{{ failed() or (succeeded() and 'ERROR' in result().stdout) }}"
+        publish:
+          - error_message: "{{ result().stdout if result().stdout != '' else result().stderr }}"
+          - notes: |
+                  Unable to get the proxy details.
+
+                  {{ ctx().error_message }}
+        do:
+          - itsm_update_results
+          - get_proxy_details
+
+  get_proxy_details:
+    action: core.winrm_ps_cmd
+    input:
+      host: "{{ ctx().ci_address }}"
+      password: "{{ ctx().winrm_password }}"
+      username: "{{ ctx().winrm_username }}"
+      verify_ssl_cert: "{{ ctx().winrm_verify_ssl }}"
+      port: "{{ ctx().winrm_port | int }}"
+      scheme: "{{ ctx().winrm_scheme }}"
+      cmd: '((get-content “C:\Program Files (x86)\OpsRamp\Agent\conf\configuration.properties” | where { $_ -like  “*proxy_server*" }).split(“=“)[1]).trim()'
+      timeout: 300
+    retry:
+      count: "{{ ctx().default_retry_limit }}"
+      delay: "{{ ctx().default_retry_delay }}"
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - proxy_server: "{{ result().stdout | replace('\\r\\n','') | trim }}"
+        do:
+          - proxy_validation
+      - when: "{{ failed() or (succeeded() and 'ERROR' in result().stdout) }}"
+        publish:
+          - error_message: "{{ result().stdout if result().stdout != '' else result().stderr }}"
+          - notes: |
+                  Unable to get the proxy server details.
+
+                  {{ ctx().error_message }}
+        do:
+          - itsm_update_results
+          - finish
+
+  proxy_validation:
+    action: core.noop
+    next:
+      - when: "{{ succeeded() and ctx().proxy_server != '' and not ctx().restart_flag }}"
+        publish:
+          - notes: |
+                  Proxy server detail from the configuration file is
+
+                  {{ ctx().proxy_server }}
+        do:
+          - itsm_update_results
+          - finish
+      - when: "{{ succeeded() and ( ctx().proxy_server == '' or ctx().proxy_server == 'null' or ctx().proxy_server == 'NULL' ) }}"
+        publish:
+          - notes: |
+                  Proxy server detail is not available in the configuration file.
+
+                  {{ ctx().proxy_server }}
+        do:
+          - itsm_update_results
+          - finish
+      - when: "{{ succeeded() and ctx().proxy_server != '' and not ctx().agent_flag and ctx().restart_flag }}"
+        publish:
+          - notes: |
+                  Proxy server detail from the configuration file is
+
+                  {{ ctx().proxy_server }}
+        do:
+          - itsm_update_results
+          - check_telnet
+      - when: "{{ failed() or (succeeded() and 'ERROR' in ctx().proxy_server) }}"
+        publish:
+          - error_message: "{{ result().stdout if result().stdout != '' else result().stderr }}"
+          - notes: |
+                  Unable to get the proxy server details.
+
+                  {{ ctx().error_message }}
+        do:
+          - itsm_update_results
+          - finish
+
+  check_telnet:
+    action: core.winrm_ps_cmd
+    input:
+      host: "{{ ctx().ci_address }}"
+      password: "{{ ctx().winrm_password }}"
+      username: "{{ ctx().winrm_username }}"
+      verify_ssl_cert: "{{ ctx().winrm_verify_ssl }}"
+      port: "{{ ctx().winrm_port | int }}"
+      scheme: "{{ ctx().winrm_scheme }}"
+      cmd: 'Test-NetConnection -ComputerName {{ ctx().proxy_server | replace("\r\n","") | trim }} -Port 3128 | select -property TcpTestSucceeded'
+      timeout: 300
+    retry:
+      count: "{{ ctx().default_retry_limit }}"
+      delay: "{{ ctx().default_retry_delay }}"
+    next:
+      - when: "{{ succeeded() and 'True' in result().stdout }}"
+        publish:
+          - notes: |
+                  Telnet is working between the proxy server
+
+                  {{ result().stdout }}
+        do:
+          - itsm_update_results
+          - finish
+      - when: "{{ succeeded() and 'False' in result().stdout }}"
+        publish:
+          - telnet_failure: true
+          - error_message: "{{ result().stdout if result().stdout != '' else result().stderr }}"
+          - notes: |
+                  Telnet is not working between the server
+
+                  {{ ctx().error_message }}
+        do:
+          - itsm_update_results
+          - finish
+      - when: "{{ failed() or (succeeded() and (result().stdout=='' or 'ERROR' in result().stdout)) }}"
+        publish:
+          - error_message: "{{ result().stdout if result().stdout != '' else result().stderr }}"
+          - notes: |
+                  Error while checking the telnet connectivity.
+
+                  {{ ctx().error_message }}
+        do:
+          - itsm_update_results
+          - finish
+
+  itsm_update_results:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      work_in_progress: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "Refer the below results.  {{ ctx().notes }}"
+    next:
+      - when: "{{ succeeded() }}"
+        do:
+          - noop
+      - when: "{{ failed() }}"
+        do:
+          - noop
+
+  finish:
+    action: core.noop
+    next:
+      - when: "{{ succeeded() and ctx().run_error_ping }}"
+        publish:
+          - am_status: "Failure"
+          - auto_service_status_info: "Automation is unable to connect to the server {{ ctx().ci_address }}."
+        do:
+          - validate_priority_upgrade
+      - when: "{{ succeeded() and (ctx().server_service_status == 'running') and not ctx().agent_flag and not ctx().run_error_ping }}"
+        publish:
+          - am_status: "Failure"
+          - auto_service_status_info: "The reported service is in running state on server  {{ ctx().ci_address }}, but agent is still offline."
+        do:
+          - validate_priority_upgrade
+      - when: "{{ succeeded() and (ctx().server_service_status == 'fail_to_start') and not ctx().run_error_ping }}"
+        publish:
+          - am_status: "Failure"
+          - auto_service_status_info: "The reported service is failed to start on server  {{ ctx().ci_address }}"
+        do:
+          - validate_priority_upgrade
+      - when: "{{ succeeded() and (ctx().server_service_status == 'Service_is_not_available') and not ctx().run_error_ping }}"
+        publish:
+          - am_status: "Failure"
+          - auto_service_status_info: "The reported service is not found on server  {{ ctx().ci_address }}"
+        do:
+          - validate_priority_upgrade
+      - when: "{{ succeeded() and (ctx().server_service_status == 'running') and not ctx().run_error_ping and ctx().agent_flag and ctx().found_recurrence }}"
+        publish:
+          - am_status: "Failure"
+          - auto_service_status_info: "The reported service is in running state on server {{ ctx().ci_address }}, and agent is online."
+        do:
+          - validate_priority_upgrade
+      - when: "{{ succeeded() and (ctx().server_service_status == 'running') and not ctx().run_error_ping and ctx().agent_flag and not ctx().found_recurrence }}"
+        publish:
+          - am_status: "Success"
+          - auto_service_status_info: "The reported service is in running state on server {{ ctx().ci_address }}, and agent is online."
+        do:
+          - itsm_close
+#      - when: "{{ succeeded() and ctx().server_uptime_days < ctx().uptime_threshold | int and (ctx().event1074 == 'Not_found') and not ctx().run_error_ping }}"
+#        publish:
+#          - am_status: "Failure"
+#          - auto_service_status_info: "The reported server  {{ ctx().ci_address }} uptime days is {{ ctx().server_uptime_days }} is less than the threshold {{ ctx().uptime_threshold }} days "
+#        do:
+#          - validate_priority_upgrade
+#      - when: "{{ succeeded() and (ctx().server_service_status == 'running') and not ctx().run_error_ping and ctx().agent_flag and ctx().server_uptime_days < ctx().uptime_threshold | int and  (ctx().event1074 == 'found') and ctx().found_recurrence }}"
+#        publish:
+#          - am_status: "Failure"
+#          - auto_service_status_info: "The reported service is in running state on server {{ ctx().ci_address }}, and agent is online."
+#        do:
+#          - validate_priority_upgrade
+#      - when: "{{ succeeded() and (ctx().server_service_status == 'running') and not ctx().run_error_ping and ctx().agent_flag and ctx().server_uptime_days > ctx().uptime_threshold | int and ctx().found_recurrence }}"
+#        publish:
+#          - am_status: "Failure"
+#          - auto_service_status_info: "The reported service is in running state on server {{ ctx().ci_address }}, and agent is online."
+#        do:
+#          - validate_priority_upgrade
+#      - when: "{{ succeeded() and (ctx().server_service_status == 'running') and not ctx().run_error_ping and ctx().agent_flag and ctx().server_uptime_days > ctx().uptime_threshold | int and not ctx().found_recurrence }}"
+#        publish:
+#          - am_status: "Success"
+#          - auto_service_status_info: "The reported service is in running state on server {{ ctx().ci_address }}, and agent is online."
+#        do:
+#          - itsm_close
+#      - when: "{{ succeeded() and (ctx().server_service_status == 'running') and not ctx().run_error_ping and ctx().agent_flag and ctx().server_uptime_days < ctx().uptime_threshold | int and  (ctx().event1074 == 'found') and not ctx().found_recurrence }}"
+#        publish:
+#          - am_status: "Success"
+#          - auto_service_status_info: "The reported service is in running state on server {{ ctx().ci_address }}, and agent is online."
+#        do:
+#          - itsm_close
+      - when: "{{ failed() }}"
+        do:
+          - noop
+      - when: "{{ (succeeded() and ('Failed to establish a new connection' in ctx().error_message)) }}"
+        publish:
+          - am_status: "Failure"
+          - auto_service_status_info: "The reported service is Failed to establish a new connection  {{ ctx().ci_address }}"
+        do:
+          - validate_priority_upgrade
+            #- when: "{{ succeeded() and 'credentials were rejected' in ctx().notes }}"
+            #publish:
+            #- am_status: "Failure"
+            #- auto_service_status_info: "Kindly find the below error."
+            #do:
+            #- itsm_escalate
+      - when: "{{ (succeeded() and 'empty' in ctx().notes) and not ctx().found_recurrence }}"
+        publish:
+          - am_status: "Failure"
+          - auto_service_status_info: "\n {{ ctx().notes }}"
+        do:
+           - itsm_escalate
+      - when: "{{ (succeeded() and 'empty' in ctx().notes) and ctx().found_recurrence }}"
+        publish:
+          - am_status: "Failure"
+          - auto_service_status_info: "\n {{ ctx().notes }}"
+        do:
+           - itsm_escalate_recurrence
+      - when: "{{ (succeeded() and ctx().agent_flag and 'empty' not in ctx().notes) and ctx().found_recurrence }}"
+        publish:
+          - am_status: "Failure"
+          - auto_service_status_info: "\n {{ ctx().notes }}"
+        do:
+          - itsm_escalate_recurrence
+      - when: "{{ succeeded() and not ctx().agent_flag and 'empty' not in ctx().notes and not ctx().found_recurrence }}"
+        publish:
+          - am_status: "Failure"
+          - auto_service_status_info: "\n {{ ctx().notes }}"
+        do:
+          - itsm_escalate
+
+  validate_priority_upgrade:
+    action: core.noop
+    next:
+      - when: "{{ succeeded() and (ctx().priority_upgrade_escalate) and (ctx().configuration_item_env == 'production')  }}"
+        do:
+          - priority_upgrade
+      - when: "{{ succeeded() and (ctx().priority_upgrade_escalate) and (ctx().configuration_item_env != 'production') and not ctx().found_recurrence }}"
+        do:
+          - itsm_escalate
+      - when: "{{ succeeded() and not ctx().priority_upgrade_escalate and not ctx().found_recurrence}}"
+        do:
+          - itsm_escalate
+      - when: "{{ succeeded() and (ctx().priority_upgrade_escalate) and (ctx().configuration_item_env != 'production')  and ctx().found_recurrence }}"
+        do:
+          - itsm_escalate_recurrence
+      - when: "{{ succeeded() and not ctx().priority_upgrade_escalate and ctx().found_recurrence }}"
+        do:
+          - itsm_escalate_recurrence
+
+  priority_upgrade:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      priorityupgrade: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      u_reason_for_priority_upgrade: "Priority Escalation requested"
+      priority: "2"
+      urgency: "2"
+      impact: "2"
+    next:
+      - when: "{{ succeeded() and not ctx().found_recurrence}}"
+        do:
+          - itsm_escalate
+      - when: "{{ succeeded() and  ctx().found_recurrence}}"
+        do:
+          - itsm_escalate_recurrence
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to update the ITSM incident {{ ctx().inc_number }}!"
+          - run_error: true
+        do:
+          - itsm_cleanup
+
+  itsm_escalate_recurrence:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      escalate: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "Automation is escalating this incident due to recurring incidents. {{ ctx().auto_service_status_info }}"
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - am_status: "Failure"
+        do:
+          - get_end_timestamp
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to update the ITSM incident {{ ctx().inc_number }}!"
+          - run_error: true
+        do:
+          - itsm_cleanup
+
+  itsm_escalate:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      escalate: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "Automation is escalating this incident as it was unable to resolve it. {{ ctx().auto_service_status_info }} "
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - am_status: "Failure"
+        do:
+          - get_end_timestamp
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to update the ITSM incident {{ ctx().inc_number }}!"
+          - run_error: true
+        do:
+          - itsm_cleanup
+
+  itsm_close:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      close: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "Automation is resolving the incident. See work log for details.{{ ctx().auto_service_status_info }} "
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - am_status: "Success"
+        do:
+          - update_kv_var
+          - get_end_timestamp
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to update the ITSM incident {{ ctx().inc_number }}!"
+          - run_error: true
+        do:
+          - itsm_cleanup
+
+  itsm_cleanup:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      escalate: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "{{ ctx().error_message }}"
+    next:
+      - when: "{{ succeeded() }}"
+        do:
+          - get_end_timestamp
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to update the ITSM incident {{ ctx().inc_number }}!"
+          - run_error: true
+        do:
+          - get_end_timestamp
+
+  get_end_timestamp:
+    action: core.noop
+    next:
+      - when: "{{ succeeded() and ctx().run_error_ping }}"
+        publish:
+          - end_timestamp: "{{ task('ping_test').end_timestamp }}"
+        do:
+          - insert_db
+      - when: "{{ succeeded() and not ctx().run_error_ping }}"
+        publish:
+          - end_timestamp: "{{ task('service_check').end_timestamp }}"
+        do:
+          - insert_db
+
+  insert_db:
+    action: ntt_monitoring.sql_insert
+    input:
+      metric_data:
+        Description: "windows_monitoring_heartbeat_failure"
+        Status: "Success"
+      process_data:
+        Account_Name: "{{ ctx().customer_name }}"
+        AM_Desc: |
+          {% if ctx().server_service_status == 'running' %}
+          The server {{ ctx().ci_address }} in service ({{  ctx().service_name }}) status is running.
+          {{ ctx().auto_service_status_info }}
+          {{ ctx().found_recurrence_value }}
+          {% endif %}
+          {% if ctx().server_service_status == 'stopped' %}
+          The server {{ ctx().ci_address }} in service ({{  ctx().service_name }}) status is stopped.
+          {{ ctx().auto_service_status_info }}
+          {{ ctx().found_recurrence_value }}
+          {% endif %}
+          {% if ctx().server_service_status == 'fail_to_start' %}
+          Failed to start on the reported service on the server {{ ctx().ci_address }}
+          {{ ctx().auto_service_status_info }}
+          {{ ctx().found_recurrence_value }}
+          {% endif %}
+          {% if ctx().server_service_status == 'Service_is_not_available' %}
+          The reported service is not available on the server {{ ctx().ci_address }}
+          {{ ctx().auto_service_status_info }}
+          {{ ctx().found_recurrence_value }}
+          {% endif %}
+          {% if ctx().run_error %}
+          {{ ctx().error_message }}
+          {{ ctx().auto_service_status_info }}
+          {{ ctx().found_recurrence_value }}
+          {% endif %}
+        AM_Status: "{{ ctx().am_status }}"
+        Configuration_Item: "{{ ctx().ci_address }}"
+        ITSM_Name: "servicenow"
+        Job_ID: <% ctx(st2).action_execution_id %>
+        Module_Name: "windows_monitoring_heartbeat_failure"
+        Ref_No: "{{ ctx().inc_number }}"
+        Tower_Name: "Windows"
+        Assignment_Group: "{{ ctx().assignment_group }}"
+        Short_Desc: "{{ ctx().short_desc }}"
+        Detail_Desc: "{{ ctx().detailed_desc }}"
+      end_timestamp: "{{ ctx().end_timestamp }}"
+      start_timestamp: "{{ ctx().start_timestamp }}"
+      account_name: "{{ ctx().customer_name }}"
+      account_service: "{{ ctx().assignment_group }}"
+      incident_id: "{{ ctx().inc_number }}"
+      configuration_item: "{{ ctx().ci_address }}"
+    next:
+      - when: "{{ succeeded() }}"
+        do:
+          - noop
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "There was an error inserting into the database. Please see the execution for details."
+        do:
+          - fail
+
+  update_kv_var:
+    action: ntt_itsm.itsm_processing_incs_remove
+    input:
+      inc_id: "{{ ctx().inc_number }}"
+    next:
+      - when: "{{ succeeded() and not ctx().run_error }}"
+        do:
+          - noop
+      - when: "{{ succeeded() and ( ctx().run_error or ctx().server_service_status == 'stopped') }}"
+        do:
+          - fail
+
+
+
+
+
+

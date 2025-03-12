@@ -84,6 +84,9 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
         # Windows Service alert
         sn_inc_endpoint = sn_inc_endpoint + '^ORshort_descriptionLIKEservice%20stopped'
 
+        #OpsRamp Agent Offline
+        sn_inc_endpoint = sn_inc_endpoint + '^ORshort_descriptionLIKEOpsRamp%20agent%20is%20offline'
+
         # define the which fiels needs to return from SOM API
         sn_inc_endpoint = sn_inc_endpoint + '&sysparm_fields=number,assignment_group,company,cmdb_ci,description,short_description,sys_id,priority,incident_state,opened_at'
 
@@ -641,6 +644,36 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
             #     'configuration_item_name': configuration_item_name
             # }
             # self._sensor_service.dispatch(trigger='ntt_itsm.win_service_check', payload=payload)
+
+        #OpsRamp Agent offline
+        elif (('opsramp agent is offline' in desc ) and 'system.ping' not in desc):
+            insertto_datastore = "true"
+
+            rec_short_desc = ''
+            rec_detailed_desc = ''
+            desc_org = inc['description']
+            #Find_Before = self.beforeString(short_desc,'OpsRamp Agent service is offline')
+            ci_address = short_desc.split('-')[2]
+            ci_address = ci_address.strip()
+           
+            rec_short_desc = 'OpsRamp agent is offline'
+            rec_detailed_desc = 'OpsRamp agent is offline'
+            # self._logger.info('Already processing INC: ' + inc['number'] +'incident_open_at' + inc['opened_at'] )
+            payload = {
+                    'assignment_group': assign_group,
+                    'ci_address': ci_address,
+                    'customer_name': company,
+                    'detailed_desc': inc['description'],
+                    'inc_number': inc['number'],
+                    'inc_sys_id': inc['sys_id'],
+                    'os_type': 'windows',
+                    'short_desc': inc['short_description'],
+                    'configuration_item_name': configuration_item_name,
+                    'rec_short_desc': rec_short_desc,
+                    'rec_detailed_desc': rec_detailed_desc
+                }
+            self._sensor_service.dispatch(trigger='ntt_itsm.win_monitoring_heartbeat_failure', payload=payload)
+
 
 
 

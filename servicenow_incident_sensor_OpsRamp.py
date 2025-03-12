@@ -674,9 +674,6 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
                 }
             self._sensor_service.dispatch(trigger='ntt_itsm.win_monitoring_heartbeat_failure', payload=payload)
 
-
-
-
         return insertto_datastore
 
     def cleanup(self):

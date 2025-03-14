@@ -1,0 +1,22 @@
+---
+  name: "itsm_unix_process_alert"
+  pack: "ntt_monitoring"
+  description: "If an incident is created for windows service then check the status of the service and update the incident with results"
+  enabled: true
+
+  trigger:
+    type: "ntt_itsm.unix_process_alert"
+    parameters: {}
+
+  action:
+    ref: "ntt_monitoring.unix_process_alert"
+    parameters:
+      assignment_group: "{{ trigger.assignment_group }}"
+      ci_address: "{{ trigger.ci_address }}"
+      customer_name: "{{ trigger.customer_name }}"
+      detailed_desc: "{{ trigger.detailed_desc }}"
+      inc_number: "{{ trigger.inc_number }}"
+      inc_sys_id: "{{ trigger.inc_sys_id }}"
+      short_desc: "{{ trigger.short_desc }}"
+      service: "{{ trigger.service }}"
+      configuration_item_name: "{{ trigger.configuration_item_name }}"

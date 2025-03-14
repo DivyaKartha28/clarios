@@ -1,0 +1,526 @@
+---
+version: 1.0
+
+description: Check if the service status for the given Server is running or not
+
+input:
+  - assignment_group
+  - ci_address
+  - customer_abbr
+  - customer_name
+  - detailed_desc
+  - dns_domain
+  - inc_number
+  - inc_sys_id
+  - os_type
+  - short_desc
+  - incident_state
+  - configuration_item_name
+  - service
+  - ssh_password_key
+  - ssh_username_key
+  - ssh_tmp_dir_key
+
+vars:
+  - service_info: ""
+  - end_timestamp: ""
+  - error_message: ""
+  - run_error: false
+  - run_error_config: false
+  - run_error_ping: false
+  - start_timestamp: ""
+  - uptime_value: null
+  - service_passed: false
+  - after_restart_check: 0
+  - found_recurrence: false
+  - found_recurrence_value: ""
+  - found_recurrence_inc_cnt: 0
+  - is_patrol: 'false'
+
+output:
+  - service_info: "{{ ctx().service_info }}"
+  # Append stdout to the end of the error message
+  - error_message: "{{ ctx().error_message }}"
+
+tasks:
+  config_vars_get:
+    action: ntt_monitoring.config_vars_get
+    input:
+      customer_abbr: "{{ ctx().customer_abbr }}"
+      workflow_overrides:
+        bolt_ssh_password_key: "{{ ctx().ssh_password_key }}"
+        bolt_ssh_username_key: "{{ ctx().ssh_username_key }}"
+        bolt_ssh_tmp_dir_key: "{{ ctx().ssh_tmp_dir_key }}"
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - ssh_password_key: "{{ result().result.connections.bolt_ssh_password_key if 'connections' in result().result and 'bolt_ssh_password_key' in result().result.connections else '' }}"
+          - ssh_username_key: "{{ result().result.connections.bolt_ssh_username_key if 'connections' in result().result and 'bolt_ssh_username_key' in result().result.connections else '' }}"
+          - ssh_tmp_dir_key: "{{ result().result.connections.bolt_ssh_tmp_dir_key if 'connections' in result().result and 'bolt_ssh_tmp_dir_key' in result().result.connections else '' }}"
+          - start_timestamp: "{{ task('config_vars_get').start_timestamp }}"
+          - ssh_username: "{{ result().result.connections.ssh_username if 'connections' in result().result and 'ssh_username' in result().result.connections else '' }}"
+          - ssh_password: "{{ result().result.connections.ssh_password if 'connections' in result().result and 'ssh_password' in result().result.connections else '' }}"
+        do:
+          - ping_test
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Could not get connection info for {{ ctx().customer_abbr }} or default please check the config file and try again"
+          - run_error_config: true
+        do:
+          - itsm_cleanup
+
+  ping_test:
+    action: ntt_monitoring.unreachable_to_ping
+    input:
+      check_uptime: false
+      ci_address: "{{ ctx().ci_address }}"
+      close_incident: false
+      inc_number: "{{ ctx().inc_number }}"
+      inc_sys_id: "{{ ctx().inc_sys_id }}"
+      insert_db: false
+      os_type: "{{ ctx().os_type }}"
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          #- uptime_value: "{{ result().output.uptime_value }}"
+          - uptime_value: "{{ result().output }}"
+        do:
+          - login_delay
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "{{ result().output.error_message }}"
+          - run_error: true
+          - run_error_ping: true
+        do:
+          - get_end_timestamp
+
+  login_delay:
+    action: core.pause
+    input:
+      max_pause: 120
+    next:
+      - when: "{{ succeeded() or failed() }}"
+        do:
+          - check_recurrence
+
+  check_recurrence:
+    action: ntt_itsm.itsm_recurrence_logic
+    input:
+      inc_id: "{{ ctx().inc_sys_id }}"
+      rec_ds_key_name: "unix_service_down_rec_days"
+      company_name: "{{ ctx().customer_name }}"
+      ci_name: "{{ ctx().configuration_item_name }}"
+      short_desc: "{{ ctx().short_desc }}"
+      long_desc: "{{ ctx().detailed_desc }}"
+    next:
+      - when: "{{ succeeded() and result().result.Found_Recurrence }}"
+        publish:
+          - found_recurrence: "{{ result().result.Found_Recurrence }}"
+          - found_recurrence_value: "{{ result().result.value }}"
+          - found_recurrence_inc_cnt: "{{ result().result.Found_Recurrence_Inc_Cnt }}"
+        do:
+          - rec_itsm_escalate
+      - when: "{{ succeeded() and not result().result.Found_Recurrence }}"
+        publish:
+          - found_recurrence: "{{ result().result.Found_Recurrence }}"
+          - found_recurrence_value: "{{ result().result.value }}"
+          - found_recurrence_inc_cnt: "{{ result().result.Found_Recurrence_Inc_Cnt }}"
+        do:
+          - rec_itsm_update_results
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to get the recurrence details from ITSM incident {{ ctx().inc_number }}!"
+        do:
+          - itsm_cleanup
+
+  rec_itsm_update_results:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      work_in_progress: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "{{ ctx().found_recurrence_value }}"
+    next:
+      - when: "{{ succeeded() }}"
+        do:
+          - allowed_service_check
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to get the recurrence details from ITSM incident {{ ctx().inc_number }}!"
+        do:
+          - itsm_cleanup
+
+  rec_itsm_escalate:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      escalate: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: |
+             Automation escalating the ticket due to recurring incidents,
+             {{ ctx().found_recurrence_value }}
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - rec_esc: true
+        do:
+          - get_end_timestamp
+      - when: "{{ failed() }}"
+        publish:
+          - rec_esc: true
+          - error_message: |
+                    Automation is escalating the ticket due to recurring incidents,
+                    {{ ctx().found_recurrence_value }}
+        do:
+          - itsm_cleanup
+
+  allowed_service_check:
+    action: core.noop
+    next:
+      - when: "{{ ctx().service not in ['ntpd','crond','syslogd','xinetd','sshd','PatrolAgent', 'opsramp-agent'] }}"
+        publish:
+          - error_message: "Automation is escalating the ticket. \nService name {{ ctx().service }} does not correspond to the unix processes for remediation through Automation."
+          - run_error: true
+        do:
+          - itsm_cleanup
+      - when: "{{ ctx().service in ['ntpd','crond','xinetd','sshd', 'opsramp-agent'] }}"
+        do:
+          - get_linux_version
+      - when: "{{ ctx().service in ['syslogd'] }}"
+        publish:
+          - service: "rsyslog"
+        do:
+          - get_linux_version
+      - when: "{{ ctx().service in ['PatrolAgent'] }}"
+        publish:
+          - status_command: "ps -ef | grep -i patrol | grep -v color"
+          - start_command: "cd /opt/bmc/Patrol3 ; ./patrolrc.sh ; ./PatrolAgent -p 3181 2>&1"
+          - chksuccess_string: "PatrolAgent"
+          - chkfailure_string: "stopped"
+          - is_patrol: 'true'
+        do:
+          - get_linux_version
+
+  get_linux_version:
+    action: core.remote
+    input:
+      hosts: "{{ ctx().ci_address }}"
+      password: "{{ ctx().ssh_password }}"
+      username: "{{ ctx().ssh_username }}"
+      cmd: "cat /etc/redhat-release"
+    next:
+      - when: "{{ succeeded() }}"
+        publish:
+          - version_stdout: "{{ result()[ctx().ci_address].stdout }}"
+          - version_stderr: "{{ result()[ctx().ci_address].stderr }}"
+        do:
+          - check_version
+      - when: "{{ failed() and 'error' in result() }}"
+        publish:
+          - run_error: true
+          - service_info: |
+                    Connection to remote host failed due to authentication issue or device not reachable.
+                    
+                    {{ result().error }}
+        do:
+          - itsm_update_results
+          - itsm_escalate
+      - when: "{{ failed() and 'error' not in result() }}"
+        publish:
+          - run_error: true
+          - service_info: |
+                    Automation not able to find the Linux Version.
+                    
+                    {{ result()[ctx().ci_address].stderr }}
+        do:
+          - itsm_update_results
+          - itsm_escalate
+
+  check_version:
+    action: core.noop
+    next:
+      - when: "{{ '6' not in ctx().version_stdout and '7' not in ctx().version_stdout and '8' not in ctx().version_stdout and 'false' in ctx().is_patrol }}"
+        publish:
+          - run_error: true
+          - service_info: |
+                    Automation is enabled only for Linux Versions 6, 7 and 8.
+                    
+                    {{ result()[ctx().ci_address].stdout }}
+        do:
+          - itsm_update_results
+          - itsm_escalate
+      - when: "{{ '6' in ctx().version_stdout and 'false' in ctx().is_patrol }}"
+        publish:
+          - status_command: "service {{ ctx().service }} status"
+          - start_command: "sudo service {{ ctx().service }} start"
+          - chksuccess_string: "running"
+          - chkfailure_string: "stopped"
+        do:
+          - check_status
+      - when: "{{ '8' in ctx().version_stdout and 'false' in ctx().is_patrol }}"
+        publish:
+          - status_command: "/bin/systemctl status {{ ctx().service }}"
+          - start_command: "sudo /bin/systemctl start {{ ctx().service }}"
+          - chksuccess_string: "running"
+          - chkfailure_string: "dead"
+        do:
+          - check_status
+      - when: "{{ '7' in ctx().version_stdout and 'false' in ctx().is_patrol }}"
+        publish:
+          - status_command: "/bin/systemctl status {{ ctx().service }}.service"
+          - start_command: "sudo /bin/systemctl start {{ ctx().service }}.service"
+          - chksuccess_string: "running"
+          - chkfailure_string: "dead"
+        do:
+          - check_status
+      - when: "{{ 'true' in ctx().is_patrol }}"
+        publish:
+          - status_command: "ps -ef | grep -i patrol | grep -v color"
+          - start_command: "cd /opt/bmc/Patrol3 ; ./patrolrc.sh ; ./PatrolAgent -p 3181 2>&1"
+          - chksuccess_string: "PatrolAgent"
+          - chkfailure_string: "stopped"
+        do:
+          - check_status
+
+  check_status:
+    action: core.remote
+    input:
+      hosts: "{{ ctx().ci_address }}"
+      password: "{{ ctx().ssh_password }}"
+      username: "{{ ctx().ssh_username }}"
+      cmd: "{{ ctx().status_command }} ; sleep 1"
+    next:
+      - when: "{{ ctx().chksuccess_string in result()[ctx().ci_address].stdout and ctx().after_restart_check == 0 }}"
+        publish:
+          - service_info: |
+                         The status of the {{ ctx().service }} service is as follows:
+                         {{ result()[ctx().ci_address].stdout }}
+
+                         The {{ ctx().service }} service is running...No further remediation steps required.
+        do:
+          - itsm_update_results
+          - itsm_close
+      - when: "{{ ctx().chksuccess_string not in result()[ctx().ci_address].stdout and ctx().after_restart_check == 0 }}"
+        publish:
+          - service_info: |
+                         The status of the {{ ctx().service }} service is as follows:
+                         {{ result()[ctx().ci_address].stdout }}
+
+                         The {{ ctx().service }} service is not running currently. Automation will perform the remediation steps to start the {{ ctx().service }} service.
+        do:
+          - itsm_update_results
+          - service_restart
+      - when: "{{ succeeded() and ctx().after_restart_check == 0 and result()[ctx().ci_address].stderr != '' and result()[ctx().ci_address].stdout == '' }}"
+        publish:
+          - service_info: |
+                         Automation not able to check the status of the {{ ctx().service }} service:
+                         {{ result()[ctx().ci_address].stdout }}
+                         {{ result()[ctx().ci_address].stderr }}
+
+                         Automation will not perform the remediation steps to start the {{ ctx().service }} service.
+        do:
+          - itsm_update_results
+          - itsm_escalate
+      - when: "{{ failed() and ctx().after_restart_check == 0 and 'error' in result() }}"
+        publish:
+          - run_error: true
+          - service_info: |
+                    Automation not able check the status of service {{ ctx().service }}
+                    {{ result().error }}
+                    Status: Failed
+        do:
+          - itsm_update_results
+          - itsm_escalate
+      - when: "{{ failed() and ctx().after_restart_check == 0 and 'stderr' in result() }}"
+        publish:
+          - run_error: true
+          - service_info: |
+                    Automation not able check the status of service {{ ctx().service }}
+
+                    {{ result()[ctx().ci_address].stderr }}
+                    Status: Failed
+        do:
+          - itsm_update_results
+          - itsm_escalate
+      - when: "{{ ctx().chksuccess_string in result()[ctx().ci_address].stdout and ctx().after_restart_check == 1 }}"
+        publish:
+          - service_info: |
+                         After monitoring for 5 minutes, the {{ ctx().service }} status is running...
+                         {{ result()[ctx().ci_address].stdout }}
+
+                         Status: Success
+        do:
+          - itsm_update_results
+          - itsm_close
+      - when: "{{ ctx().chksuccess_string not in result()[ctx().ci_address].stdout and ctx().after_restart_check == 1 }}"
+        publish:
+          - service_info: |
+                         After monitoring for 5 minutes, the {{ ctx().service }} status is not running...
+                         {{ result()[ctx().ci_address].stdout }}
+
+                         Status: Failed
+        do:
+          - itsm_update_results
+          - itsm_escalate
+      - when: "{{ (failed() and ctx().after_restart_check == 1) or (succeeded() and result()[ctx().ci_address].stderr != '' and result()[ctx().ci_address].stdout == '') }}"
+        publish:
+          - run_error: true
+          - service_info: |
+                    Automation initiated the service restart. Automation not able check the status of service {{ ctx().service }} after 5 minutes delay.
+
+                    {{ result()[ctx().ci_address].stderr }}
+                    Status: Failed
+        do:
+          - itsm_update_results
+          - itsm_escalate
+      
+
+  service_restart:
+    action: core.remote
+    input:
+      hosts: "{{ ctx().ci_address }}"
+      password: "{{ ctx().ssh_password }}"
+      username: "{{ ctx().ssh_username }}"
+      cmd: "{{ ctx().start_command }} ; sleep 10 ; {{ ctx().status_command }}"
+    next:
+      - when: "{{ succeeded() and (ctx().chksuccess_string in result()[ctx().ci_address].stdout or 'OK' in result()[ctx().ci_address].stdout or (result()[ctx().ci_address].stdout == '' and result()[ctx().ci_address].stdout == '' ))}}"
+        publish:
+          - after_restart_check: 1
+          - service_info: |
+                         Automation has successfully started the {{ ctx().service }} service,
+
+                         Restart Status:
+                         {{ result()[ctx().ci_address].stdout }}
+
+                         Automation will monitor the {{ ctx().service }} service status for 5 minutes.
+        do:
+          - itsm_update_results
+          - connection_delay
+      - when: "{{ succeeded() and ctx().chksuccess_string not in result()[ctx().ci_address].stdout and 'OK' not in result()[ctx().ci_address].stdout and result()[ctx().ci_address].stderr != '' }}"
+        publish:
+          - service_info: |
+                         Automation tried to start the service {{ ctx().service }}. Received error response. ,
+
+                         Restart Status:
+                         {{ result()[ctx().ci_address].stderr }}
+                         {{ result()[ctx().ci_address].stdout }}
+        do:
+          - itsm_update_results
+          - itsm_escalate
+      - when: "{{ failed() }}"
+        publish:
+          - run_error: true
+          - service_info: |
+                    Automation not able to start the service {{ ctx().service }}
+
+                    {{ result()[ctx().ci_address].stdout }}
+                    {{ result()[ctx().ci_address].stderr }}
+        do:
+          - itsm_update_results
+          - itsm_escalate
+
+  connection_delay:
+    action: core.pause
+    input:
+      max_pause: 300
+    next:
+      - when: "{{ succeeded() or failed() }}"
+        do:
+          - check_status
+
+
+  itsm_update_results:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      work_in_progress: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "{{ ctx().service_info }}"
+    next:
+      - when: "{{ completed() or succeeded() or failed() }}"
+        do:
+          - noop
+
+  itsm_close:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      close: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "Automation is resolving the incident. See work log for details."
+    next:
+      - when: "{{ succeeded() }}"
+        do:
+          - update_kv_var
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to update the ITSM incident {{ ctx().inc_number }}!"
+        do:
+          - itsm_cleanup
+
+  itsm_cleanup:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      escalate: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "{{ ctx().error_message }}"
+    next:
+      - when: "{{ succeeded() }}"
+        do:
+          - insert_db
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to update the ITSM incident {{ ctx().inc_number }}!"
+        do:
+          - get_end_timestamp
+
+  update_kv_var:
+    action: ntt_itsm.itsm_processing_incs_remove
+    input:
+      inc_id: "{{ ctx().inc_number }}"
+    next:
+      - when: "{{ completed() }}"
+        do:
+          - get_end_timestamp
+
+  itsm_escalate:
+    action: ntt_itsm.itsm_incident_update
+    input:
+      escalate: true
+      inc_id: "{{ ctx().inc_sys_id }}"
+      notes: "Automation is escalating this incident as it was unable to resolve it."
+    next:
+      - when: "{{ succeeded() }}"
+        do:
+          - get_end_timestamp
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "Unable to update the ITSM incident {{ ctx().inc_number }}!"
+        do:
+          - itsm_cleanup
+
+  get_end_timestamp:
+    action: core.noop
+    next:
+      - when: "{{ succeeded() and ctx().run_error_ping }}"
+        publish:
+          - end_timestamp: "{{ task('ping_test').end_timestamp }}"
+        do:
+          - insert_db
+      - when: "{{ succeeded() and not ctx().run_error_ping }}"
+        publish:
+          - end_timestamp: "{{ task('check_status').end_timestamp }}"
+        do:
+          - insert_db
+
+  insert_db:
+    action: ntt_monitoring.write_into_file
+    input:
+      inc_number: "{{ ctx().inc_number }}"
+      itsm_data: "CI Name:{{ ctx().ci_address }}|Incident Number:{{ ctx().inc_number }}|Status:{{ ctx().run_error }}|Module Name:unix_process_alert|Tower:Unix"
+      job_id: <% ctx(st2).action_execution_id %>
+    next:
+      - when: "{{ succeeded() }}"
+        do:
+          - noop
+      - when: "{{ failed() }}"
+        publish:
+          - error_message: "There was an error inserting into the database. Please see the execution for details."
+        do:
+          - fail

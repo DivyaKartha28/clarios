@@ -1,0 +1,76 @@
+---
+name: unix_process_alert
+pack: ntt_monitoring
+description: Check if the service status for the given Server is running or not
+runner_type: orquesta
+entry_point: workflows/unix_process_alert.yaml
+enabled: true
+parameters:
+  assignment_group:
+    type: string
+    description: "Assignment group from ITSM to pass into the database entry"
+    required: true
+  ci_address:
+    type: string
+    description: "FQDN of the Windows server to check the CPUs for"
+    required: true
+  customer_abbr:
+    type: string
+    description: "3 letter customer abbreviation"
+    required: true
+    default: "{{ st2kv.system.customer_abbr }}"
+  customer_name:
+    type: string
+    description: "Customer name from ITSM to pass into the database entry"
+    required: true
+  detailed_desc:
+    type: string
+    description: "Detailed description name from ITSM to pass into the database entry"
+    required: true
+  dns_domain:
+    type: string
+    description: "DNS domain to append to the hostname"
+    required: true
+    default: "{{ st2kv.system.winrm.dns_domain }}"
+  inc_number:
+    type: string
+    description: "ITSM incident number"
+    required: true
+  inc_sys_id:
+    type: string
+    description: "ITSM incident sys_id"
+    required: true
+  os_type:
+    type: string
+    description: "Operating system type of the server (windows, linux)"
+    required: true
+    default: "Unix"
+  short_desc:
+    type: string
+    description: "Short description name from ITSM to pass into the database entry"
+    required: true
+  incident_state:
+    type: string
+    description: "ITSM incident state"
+    required: true
+    default: "2"
+  configuration_item_name:
+    type: string
+    description: "Hostname of the server"
+    required: true
+  service:
+    type: string
+    description: "Service whose status on the server need to be checked"
+    required: true
+  ssh_password_key:
+    type: string
+    description: "ST2 key that stores ssh password for bolt runs"
+    required: false
+  ssh_username_key:
+    type: string
+    description: "ST2 key that stores ssh username for bolt runs"
+    required: false
+  ssh_tmp_dir_key:
+    type: string
+    description: "ST2 key that stores ssh tmp dir for bolt runs"
+    required: false

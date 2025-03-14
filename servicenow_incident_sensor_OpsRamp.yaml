@@ -360,3 +360,43 @@
           configuration_item_name:
             type: "string"
             format: "incident CI name from SN"
+          
+    -
+      name: "unix_process_alert"
+      description: "If an incident is created for disk utilization then check and update the incident with results"
+      payload_schema:
+        type: "object"
+        properties:
+          assignment_group:
+            type: "string"
+            format: "Assignment group from SN to pass into the database entry"
+          ci_address:
+            type: "string"
+            format: "FQDN of the server to check the CPUs for"
+          customer_name:
+            type: "string"
+            format: "Customer name from SN to pass into the database entry"
+          detailed_desc:
+            type: "string"
+            format: "Detailed description name from SN to pass into the database entry"
+          inc_number:
+            type: "string"
+            format: "ITSM incident number"
+          inc_sys_id:
+            type: "string"
+            format: "ITSM incident sys_id"
+          os_type:
+            type: "string"
+            format: "Operating system type of the server (windows, linux)"
+          short_desc:
+            type: "string"
+            format: "Short description name from ITSM to pass into the database entry"
+          service:
+            type: "string"
+            format: "service name from ITSM"
+          configuration_item_name:
+            type: "string"
+            format: "Configuration item name from ITSM"
+          incident_state:
+            type: "string"
+            format: "incident state from SN to pass into the database entry"

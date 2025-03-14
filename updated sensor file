@@ -647,7 +647,7 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
             # self._sensor_service.dispatch(trigger='ntt_itsm.win_service_check', payload=payload)
 
         #OpsRamp Agent offline
-        elif (('opsramp agent is offline' in desc ) and ('wintel' in assign_group.lower() or 'intel' in assign_group.lower())):
+        elif (('opsramp agent is offline' in desc ) and ('wintel' in assign_group.lower() or 'intel' in assign_group.lower() or 'clarios-uscan fieldservice l2' in assign_group.lower() or 'clarios-uscan fieldservice l3'  in assign_group.lower())):
             insertto_datastore = "true"
             trigger_action = 'true'
             rec_short_desc = ''
@@ -657,12 +657,11 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
             ci_address = short_desc.split('-')[2]
             ci_address = ci_address.strip()
             trigger_action = 'true'
-            if 'nttds-wintel global l1' in assign_group.lower():
+            if ('nttds-wintel global l1' in assign_group.lower() or 'clarios-uscan fieldservice l2' in assign_group.lower() or  'clarios-uscan fieldservice l3' in assign_group.lower()):
+                trigger_action = 'true'
                 support_group = self.get_support_group(inc)
-                if 'wintel' in assign_group.lower():
-                    trigger_action = 'true'
-                else:
-                    trigger_action = 'false'
+            else:
+                trigger_action = 'false'
             rec_short_desc = 'OpsRamp agent is offline'
             rec_detailed_desc = 'OpsRamp agent is offline'
             # self._logger.info('Already processing INC: ' + inc['number'] +'incident_open_at' + inc['opened_at'] )
@@ -689,7 +688,7 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
             trigger_action = 'true'
             if 'clarios-unix global l1' in assign_group.lower():
                 support_group = self.get_support_group(inc)
-                if 'wintel' in assign_group.lower():
+                if 'unix' in assign_group.lower():
                     trigger_action = 'true'
                 else:
                     trigger_action = 'false'

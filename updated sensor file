@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python
 # Copyright 2021 Encore Technologies
 #
@@ -646,7 +647,7 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
             # self._sensor_service.dispatch(trigger='ntt_itsm.win_service_check', payload=payload)
 
         #OpsRamp Agent offline
-        elif (('opsramp agent is offline' in desc ) and 'system.ping' not in desc):
+        elif (('opsramp agent is offline' in desc ) and ('wintel' in assign_group.lower() or 'intel' in assign_group.lower())):
             insertto_datastore = "true"
             trigger_action = 'true'
             rec_short_desc = ''
@@ -656,7 +657,7 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
             ci_address = short_desc.split('-')[2]
             ci_address = ci_address.strip()
             trigger_action = 'true'
-            if 'clarios-uscan fieldservice l3' in assign_group.lower():
+            if 'nttds-wintel global l1' in assign_group.lower():
                 support_group = self.get_support_group(inc)
                 if 'wintel' in assign_group.lower():
                     trigger_action = 'true'
@@ -686,7 +687,7 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
         elif ('process stats' in short_desc_lower or 'opsramp agent is offline' in short_desc_lower) and ('unix' in assign_group.lower() or 'linux' in assign_group.lower()):
             insertto_datastore = "true"
             trigger_action = 'true'
-            if 'clarios-uscan fieldservice l3' in assign_group.lower():
+            if 'clarios-unix global l1' in assign_group.lower():
                 support_group = self.get_support_group(inc)
                 if 'wintel' in assign_group.lower():
                     trigger_action = 'true'
@@ -732,3 +733,4 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
 
     def remove_trigger(self, trigger):
         pass
+

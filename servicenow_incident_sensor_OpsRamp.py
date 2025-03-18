@@ -1,4 +1,5 @@
 
+
 #!/usr/bin/env python
 # Copyright 2021 Encore Technologies
 #
@@ -231,7 +232,7 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
         # ci_address = Find_Before.strip()
 
         # Windows System UpTime , Windows Hostdown Ping failure
-        if ('system.os.uptime' in short_desc_lower or 'packet loss' in short_desc_lower or 'is not responding to ping' in short_desc_lower ) and ('wintel' in assign_group.lower() or 'intel' in assign_group.lower() or 'unix' in assign_group.lower() or 'clarios-uscan fieldservice l3' in assign_group.lower() or 'clarios-hypervisor support' in assign_group.lower() or 'nttds-central hypervisor support' in assign_group.lower() or 'nttds-publiccloudops' in assign_group.lower() or 'nttds-is storage infrastructure' in assign_group.lower() or 'nttds-storage l1' in assign_group.lower() ):
+        if ('system.os.uptime' in short_desc_lower or 'packet loss' in short_desc_lower or 'is not responding to ping' in short_desc_lower  or 'system.ping' in desc ) and ('wintel' in assign_group.lower() or 'intel' in assign_group.lower() or 'unix' in assign_group.lower() or 'clarios-uscan fieldservice l3' in assign_group.lower() or 'clarios-hypervisor support' in assign_group.lower() or 'nttds-central hypervisor support' in assign_group.lower() or 'nttds-publiccloudops' in assign_group.lower() or 'nttds-is storage infrastructure' in assign_group.lower() or 'nttds-storage l1' in assign_group.lower() ):
             insertto_datastore = "true"
             if ('unix' in assign_group.lower() or 'clarios-hypervisor support' in assign_group.lower() or 'nttds-central hypervisor support' in assign_group.lower() or 'nttds-publiccloudops' in assign_group.lower() or 'nttds-is storage infrastructure' in assign_group.lower() or 'nttds-storage l1' in assign_group.lower()):
                 os_type='linux'
@@ -284,8 +285,19 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
                     Find_Before = self.beforeString(Find_After, ' ')
                     ci_address = Find_Before.strip()
 
+            elif 'system.ping' in desc:
+                rec_short_desc = 'system.ping'
+                rec_detailed_desc = 'system.ping'
+                
+                if configuration_item_name == '':
+                    ci_address = desc.split("IP: ")[1].split(" Metric")[0]
+                else:
+                    ci_address = configuration_item_name
+
             ci_address = ci_address.strip()
             ci_address = ci_address.lower()
+
+            
 
 
             payload = {

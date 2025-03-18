@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python
 # Copyright 2021 Encore Technologies
 #
@@ -76,7 +77,7 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
 
 
         # Windows Disk usage
-        sn_inc_endpoint = sn_inc_endpoint + '^ORshort_descriptionLIKEDisk%20C'
+        sn_inc_endpoint = sn_inc_endpoint + '^ORdescriptionLIKEDisk%20C%20is'
 
         # Linux Disk usage
         sn_inc_endpoint = sn_inc_endpoint + '^ORshort_descriptionLIKEDisk%20%2Fvar'
@@ -556,7 +557,7 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
                 insertto_datastore = "false"
 
         # Windows Low disk
-        elif 'disk' in short_desc_lower and 'c' in short_desc_lower and ('wintel' in assign_group.lower() or 'intel' in assign_group.lower() or 'nttds-publiccloudops' in assign_group.lower() or 'clarios-uscan fieldservice l3' in assign_group.lower()):
+        elif ('disk c is' in desc) and ('wintel' in assign_group.lower() or 'intel' in assign_group.lower() or 'nttds-publiccloudops' in assign_group.lower() or 'clarios-uscan fieldservice l3' in assign_group.lower()):
 
             insertto_datastore = "true"
             trigger_action = 'true'
@@ -646,16 +647,26 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
             # self._sensor_service.dispatch(trigger='ntt_itsm.win_service_check', payload=payload)
 
         #OpsRamp Agent offline
-        elif (('opsramp agent is offline' in desc ) and 'system.ping' not in desc):
+        elif (('opsramp agent is offline' in desc ) and ('wintel' in assign_group.lower() or 'intel' in assign_group.lower() or 'clarios-uscan fieldservice l2' in assign_group.lower() or 'clarios-uscan fieldservice l3'  in assign_group.lower())):
             insertto_datastore = "true"
-
+            trigger_action = 'true'
             rec_short_desc = ''
             rec_detailed_desc = ''
             desc_org = inc['description']
             #Find_Before = self.beforeString(short_desc,'OpsRamp Agent service is offline')
-            ci_address = short_desc.split('-')[2]
-            ci_address = ci_address.strip()
-           
+
+            if configuration_item_name == '':
+                ci_address = short_desc.split('-')[0]
+                ci_address = ci_address.strip()
+            else:
+                ci_address = configuration_item_name
+
+            trigger_action = 'true'
+            if ('nttds-wintel global l1' in assign_group.lower() or 'clarios-uscan fieldservice l2' in assign_group.lower() or  'clarios-uscan fieldservice l3' in assign_group.lower()):
+                trigger_action = 'true'
+                support_group = self.get_support_group(inc)
+            else:
+                trigger_action = 'false'
             rec_short_desc = 'OpsRamp agent is offline'
             rec_detailed_desc = 'OpsRamp agent is offline'
             # self._logger.info('Already processing INC: ' + inc['number'] +'incident_open_at' + inc['opened_at'] )
@@ -672,7 +683,46 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
                     'rec_short_desc': rec_short_desc,
                     'rec_detailed_desc': rec_detailed_desc
                 }
-            self._sensor_service.dispatch(trigger='ntt_itsm.win_monitoring_heartbeat_failure', payload=payload)
+            if 'true' in trigger_action:
+                self._sensor_service.dispatch(trigger='ntt_itsm.win_monitoring_heartbeat_failure', payload=payload)
+            else:
+                insertto_datastore = "false"
+
+        elif ('process stats' in short_desc_lower or 'opsramp agent is offline' in short_desc_lower) and ('unix' in assign_group.lower() or 'linux' in assign_group.lower()):
+            insertto_datastore = "true"
+            trigger_action = 'true'
+            if 'clarios-unix global l1' in assign_group.lower():
+                support_group = self.get_support_group(inc)
+                if 'unix' in assign_group.lower():
+                    trigger_action = 'true'
+                else:
+                    trigger_action = 'false'
+
+            if 'opsramp agent is offline' in short_desc_lower:
+                service = 'opsramp-agent'
+            else:
+                service = ""
+                service_begin = desc_org.split('Process Name- ')[-1].replace('\n','').replace('\r','').strip()
+                service = service_begin.split('Instance count')[0].strip().lower()
+            
+ 
+            payload = {
+                'assignment_group': assign_group,
+                'ci_address': ci_address,
+                'customer_name': company,
+                'detailed_desc': inc['description'],
+                'inc_number': inc['number'],
+                'inc_sys_id': inc['sys_id'],
+                'os_type': 'linux',
+                'short_desc': inc['short_description'],
+                'service': service,
+                'incident_state': inc['incident_state'],
+                'configuration_item_name': configuration_item_name
+            }
+            if 'true' in trigger_action:
+                self._sensor_service.dispatch(trigger='ntt_itsm.unix_process_alert', payload=payload)
+            else:
+                insertto_datastore = "false"
 
         return insertto_datastore
 
@@ -687,4 +737,3 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
 
     def remove_trigger(self, trigger):
         pass
-

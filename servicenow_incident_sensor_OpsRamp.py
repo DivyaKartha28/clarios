@@ -1,5 +1,4 @@
 
-
 #!/usr/bin/env python
 # Copyright 2021 Encore Technologies
 #
@@ -75,6 +74,7 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
         sn_inc_endpoint = sn_inc_endpoint + '^ORshort_descriptionLIKEsystem.os.uptime'
         sn_inc_endpoint = sn_inc_endpoint + '^ORshort_descriptionLIKEPacket%20Loss'
         sn_inc_endpoint = sn_inc_endpoint + '^ORshort_descriptionLIKEIs%20not%20responding%20to%20Ping'
+        sn_inc_endpoint = sn_inc_endpoint + '^ORdescriptionLIKEsystem.ping'
 
 
         # Windows Disk usage
@@ -288,7 +288,7 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
             elif 'system.ping' in desc:
                 rec_short_desc = 'system.ping'
                 rec_detailed_desc = 'system.ping'
-                
+
                 if configuration_item_name == '':
                     ci_address = desc.split("IP: ")[1].split(" Metric")[0]
                 else:

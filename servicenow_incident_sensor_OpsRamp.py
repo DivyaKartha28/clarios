@@ -290,7 +290,7 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
                 rec_detailed_desc = 'system.ping'
 
                 if configuration_item_name == '':
-                    ci_address = desc.split("IP: ")[1].split(" Metric")[0]
+                    ci_address = desc.lower().split("ip:")[-1].replace('\n', '').replace('\r', '').split("metric")[0]
                 else:
                     ci_address = configuration_item_name
 

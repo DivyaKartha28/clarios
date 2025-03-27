@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 # Copyright 2021 Encore Technologies
 #
@@ -663,26 +662,30 @@ class ServiceNowIncidentSensorOpsRamp(PollingSensor):
 
             trigger_action = 'true'
             if ('nttds-wintel global l1' in assign_group.lower() or 'clarios-uscan fieldservice l2' in assign_group.lower() or  'clarios-uscan fieldservice l3' in assign_group.lower()):
-                trigger_action = 'true'
                 support_group = self.get_support_group(inc)
-            else:
-                trigger_action = 'false'
+                if 'wintel' in assign_group.lower():
+                    trigger_action = 'true'
+                else:
+                    trigger_action = 'false'
             rec_short_desc = 'OpsRamp agent is offline'
             rec_detailed_desc = 'OpsRamp agent is offline'
             # self._logger.info('Already processing INC: ' + inc['number'] +'incident_open_at' + inc['opened_at'] )
             payload = {
-                    'assignment_group': assign_group,
-                    'ci_address': ci_address,
-                    'customer_name': company,
-                    'detailed_desc': inc['description'],
-                    'inc_number': inc['number'],
-                    'inc_sys_id': inc['sys_id'],
-                    'os_type': 'windows',
-                    'short_desc': inc['short_description'],
-                    'configuration_item_name': configuration_item_name,
-                    'rec_short_desc': rec_short_desc,
-                    'rec_detailed_desc': rec_detailed_desc
-                }
+                'assignment_group': assign_group,
+                'ci_address': ci_address,
+                'customer_name': company,
+                'detailed_desc': inc['description'],
+                'inc_number': inc['number'],
+                'inc_sys_id': inc['sys_id'],
+                'incident_open_at': inc['opened_at'],
+                'os_type': 'windows',
+                'short_desc': inc['short_description'],
+                'incident_state': inc['incident_state'],
+                'rec_short_desc': rec_short_desc,
+                'rec_detailed_desc': rec_detailed_desc,
+                'configuration_item_name': configuration_item_name,
+                'configuration_item_env': configuration_item_env
+            }
             if 'true' in trigger_action:
                 self._sensor_service.dispatch(trigger='ntt_itsm.win_monitoring_heartbeat_failure', payload=payload)
             else:

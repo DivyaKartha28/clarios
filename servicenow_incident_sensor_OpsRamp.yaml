@@ -332,7 +332,7 @@
             format: "Assignment group from SN to pass into the database entry"
           ci_address:
             type: "string"
-            format: "FQDN of the server to check the CPUs for"         
+            format: "FQDN of the server to check the CPUs for"
           customer_name:
             type: "string"
             format: "Customer name from SN to pass into the database entry"
@@ -345,12 +345,18 @@
           inc_sys_id:
             type: "string"
             format: "ITSM incident sys_id"
+          incident_open_at:
+            type: "string"
+            format: "ITSM incident created at"
           os_type:
             type: "string"
-            format: "Operating system type of the server (windows, linux)"          
+            format: "Operating system type of the server (windows, linux)"
           short_desc:
             type: "string"
-            format: "Short description name from ITSM to pass into the database entry"          
+            format: "Short description name from ITSM to pass into the database entry"
+          incident_state:
+            type: "string"
+            format: "incident state from SN to pass into the database entry"
           rec_short_desc:
             type: "string"
             format: "find the recurrence incident with short desc"
@@ -360,6 +366,9 @@
           configuration_item_name:
             type: "string"
             format: "incident CI name from SN"
+          configuration_item_env:
+            type: "string"
+            format: "incident CI env from SN"
           
     -
       name: "unix_process_alert"

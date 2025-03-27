@@ -1,1 +1,4 @@
 tail -f /var/log/st2/st2sensorcontainer.log
+
+
+ https://nttdsuat.service-now.com/api/now/table/incident?sysparm_query=active=true^incident_state=2^company.sys_id=5d89b80fdb9bb7005e23ef92ca96197d^priority=3^ORpriority=4^sys_created_on>=javascript:gs.beginningOfYesterday()^short_descriptionLIKEsystem.cpu.usage.utilization^ORshort_descriptionLIKEsystem.memory.physical.utilization^ORshort_descriptionLIKEsystem.memory.virtual.utilization^ORshort_descriptionLIKEsystem.memory.cache.utilization^ORshort_descriptionLIKEsystem.os.uptime^ORshort_descriptionLIKEPacket%20Loss^ORshort_descriptionLIKEIs%20not%20responding%20to%20Ping^ORdescriptionLIKEDisk%20C%20is^ORshort_descriptionLIKEDisk%20%2Fvar^ORshort_descriptionLIKEservice%20stopped^ORshort_descriptionLIKEOpsRamp%20agent%20is%20offline&sysparm_fields=number,assignment_group,company,cmdb_ci,description,short_description,sys_id,priority,incident_state,opened_at

@@ -1,0 +1,27 @@
+{
+  "description": "Verify opsram agent statsu for the given VM ",
+  "implementations": [
+    {"name": "win_monitoring_heartbeat_failure.ps1", "requirements": ["powershell"]}
+  ],
+  "parameters": {
+    
+      "dns_domain": {
+      "description": "DNS domain to append to the hostname",
+      "type": "String"
+    },
+    "serviceslist": {
+      "description": "service list tobe check on hostname",
+      "type": "String"
+    },
+    "serviceretry": {
+      "description": "Number of times to retry the service restart",
+      "type": "String"
+    },
+    "forcerestart": {
+      "description": "Mention whether the service has to be force restarted.",
+      "type": "String"
+    }		
+  }
+}
+
+

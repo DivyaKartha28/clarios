@@ -1,0 +1,109 @@
+###################################################################################################################################
+# Clean the contents of the given directories
+#
+###################################################################################################################################
+Param(
+  [String] $ci_address,
+  [Array]  $directories,
+  [String] $disk_name
+)
+Try {
+  # Check for arguments...
+  If (!($directories)) {
+    Write-Output "No directories passed to script. Exiting."
+    Throw 1406
+  }
+
+  Write-Host "Starting CleanDirectories..."
+
+  # Initialize counter variables...
+  $count = 0
+  $dCount = 0
+  $udCount = 0
+  $dSize = 0
+  $tSize = 0
+
+  ForEach ($dir in $directories) {
+    Write-Output "Searching directory $dir ..."
+    # Prevent this automation from removing any OS required files
+    # Searching directory \Windows\Downloaded Program Files\ ...
+    # Searching directory \Windows\Temp\ ...
+    If ( ($dir -eq '\Windows\') -OR ($dir.contains("\Users\")) -OR ($dir -eq '\Program Files\') -OR ($dir -eq '\Program Files (x86)\') -OR ($dir.contains("ProgramData")) ) {
+      Write-Output "Directory $dir not allowed to be deleted on $ci_address."
+      Continue
+    }
+    # Check if just the disk name was given instead of the path
+    if ($disk_name.length -eq 1) {
+      $disk_name += ':\'
+    }
+    $delPath = '\\' + $ci_address + '\' + $disk_name.Replace(":", "$") + $dir
+    If (!(Test-Path -LiteralPath "$delPath" -PathType Container)) {
+      Write-Output "Directory $delPath not found on $ci_address."
+      Continue
+    }
+
+    [array]$FileList = Get-ChildItem -LiteralPath $delPath -Force -Recurse -ErrorAction SilentlyContinue |
+      Where { ! $_.PSIsContainer } |
+      Select-Object *
+    [array]$DirList = Get-ChildItem -LiteralPath $delPath -Force -Recurse -ErrorAction SilentlyContinue  |
+      Where { $_.PSIsContainer } |
+      Select-Object * |
+      Sort-Object FullName -Descending
+
+    If (($DirList -ne $null) -and ($FileList -ne $null)) {
+      $FileList = $FileList + $DirList
+    }
+ }
+
+    [array]$FileList = Get-ChildItem -LiteralPath $delPath -Force -Recurse -ErrorAction SilentlyContinue |
+      Where { ! $_.PSIsContainer } |
+      Select-Object *
+    [array]$DirList = Get-ChildItem -LiteralPath $delPath -Force -Recurse -ErrorAction SilentlyContinue  |
+      Where { $_.PSIsContainer } |
+      Select-Object * |
+      Sort-Object FullName -Descending
+
+    If (($DirList -ne $null) -and ($FileList -ne $null)) {
+      $FileList = $FileList + $DirList
+    }
+    If ($?) {
+      If ($FileList -eq $null) {
+        # Directory is empty. Say so and move on.
+        Write-Output "No files found in $delPath."
+        Continue
+      }
+      ForEach ($file in $FileList) {
+        $count += 1
+        $fPath = $file.FullName
+        If (Test-Path -LiteralPath $fPath) {
+          Write-Output "Would have Remove-Item $fPath -Force -Recurse -ErrorAction SilentlyContinue"
+          Remove-Item $fPath -Force -Recurse -ErrorAction SilentlyContinue
+          If($?) {
+            Write-Output "Deleted: $fPath"
+            $dCount += 1
+            $dSize += $file.Length
+          } Else {
+            Write-Output "Failed to delete $fPath"
+            $udCount += 1
+            $tSize += $file.Length
+          }#If
+        } Else {
+          Write-Output "$fPath not found on $ci_address."
+        }
+      }#ForEach
+    }#If
+  }#ForEach
+
+  Write-Output "Total files: $count"
+  Write-Output "Total deleted files: $dCount"
+  Write-Output "Total size of deleted files: $dSize"
+
+  exit 0
+
+} Catch {
+  $errortext = $error | Out-string
+  $errortext = $errortext.substring(0, $errortext.indexof("At "))
+  $errortext = $errortext.substring($errortext.indexof(":") + 2, $errortext.length - $errortext.indexof(":") - 3)
+  $errortext
+  exit 1
+}
